@@ -2,12 +2,18 @@ use colored::*;
 use terminal_size::{Width, Height, terminal_size};
 use std::io::{self, Write};
 
+enum LoopControl {
+    Continue,
+    Exit,
+}
+
 enum Operation {
     Add,
     Subtract,
     Multiply,
     Divide,
     Exit,
+    Default,
 }
 
 struct Calculator {
@@ -32,21 +38,21 @@ impl Calculator {
         }
     }
 
-    fn styled_message(text: &String) -> impl std::fmt::Display {
+    fn styled_message(text: &str) -> impl std::fmt::Display {
         text
             .bright_cyan()
             .bold()
             .on_black()
     }
 
-    fn styled_error(text: &String) -> impl std::fmt::Display {
+    fn styled_error(text: &str) -> impl std::fmt::Display {
         text
             .red()
             .bold()
             .on_black()
     }
 
-    fn pretty_print(&self, text: &String) {
+    fn pretty_print(&self, text: &str) {
         println!(
             "{:^width$}",
             Calculator::styled_message(text),
@@ -54,15 +60,15 @@ impl Calculator {
         );
     }
 
-    fn pretty_print_inline(&self, text: &String) {
+    fn pretty_print_inline(&self, text: &str) {
         print!("{}", Calculator::styled_message(text));
     }
 
-    fn pretty_print_error(&self, text: &String) {
+    fn pretty_print_error(&self, text: &str) {
         println!("{}", Calculator::styled_error(text));
     }
 
-    fn read_number(&self, prompt: &String) -> f64 {
+    fn read_number(&self, prompt: &str) -> f64 {
         loop {
             self.pretty_print(prompt);
             io::stdout().flush().unwrap();
@@ -73,66 +79,99 @@ impl Calculator {
             match input.trim().parse::<f64>() {
                 Ok(num) => return num,
                 Err(_) => {
-                    self.pretty_print_error(&String::from("Please enter a valid number"));
+                    self.pretty_print_error("Please enter a valid number");
                 }
             }
         }
     }
 
     fn get_two_numbers(&self) -> (f64, f64) {
-        let a = self.read_number(&String::from("Enter first number:"));
-        let b = self.read_number(&String::from("Enter second number:"));
+        let a = self.read_number("Enter first number:");
+        let b = self.read_number("Enter second number:");
 
         (a, b)
     }
 
+    fn get_user_option(&self) -> i32 {
+        self.pretty_print_inline("Enter your choice: ");
+
+        io::stdout().flush().unwrap();
+
+        let mut option = String::new();
+
+        io::stdin().read_line(&mut option).expect("Failed to read line");
+
+        let option: i32 = match option.trim().parse() {
+            Ok(num) => num,
+            Err(_) => {
+                self.pretty_print_error("Please type a number.");
+                -1
+            },
+        };
+
+        option
+    }
+
+    fn map_option_to_operation(option: i32) -> Operation {
+        match option {
+            1 => Operation::Add,
+            2 => Operation::Subtract,
+            3 => Operation::Multiply,
+            4 => Operation::Divide,
+            5 => Operation::Exit,
+            _ => Operation::Default,
+        }
+    }
+
+    fn execute_operation(&self, operation: &Operation) -> Result<LoopControl, String> {
+        match operation {
+            Operation::Add => {
+                let (a, b) = self.get_two_numbers();
+                self.pretty_print(&format!("{} + {} = {}", a, b, a + b));
+
+                Ok(LoopControl::Continue)
+            },
+            Operation::Subtract => {
+                let (a, b) = self.get_two_numbers();
+                self.pretty_print(&format!("{} - {} = {}", a, b, a - b));
+
+                Ok(LoopControl::Continue)
+            },
+            Operation::Multiply => {
+                let (a, b) = self.get_two_numbers();
+                self.pretty_print(&format!("{} * {} = {}", a, b, a * b));
+
+                Ok(LoopControl::Continue)
+            },
+            Operation::Divide => {
+                let (a, b) = self.get_two_numbers();
+                if b == 0.0 {
+                    return Err(String::from("Cannot divide by zero"));
+                }
+                self.pretty_print(&format!("{} / {} = {}", a, b, a / b));
+                Ok(LoopControl::Continue)
+            },
+            Operation::Exit => {
+                self.pretty_print(&String::from("Exit"));
+                Ok(LoopControl::Exit)
+            },
+            Operation::Default => Err(
+                String::from("Please type a number between 1 and 5")
+            ),
+        }
+    }
+
     fn start_loop(&self) {
         loop {
-            self.pretty_print_inline(&String::from("Enter your choice: "));
 
-            io::stdout().flush().unwrap();
+            let option: i32 = self.get_user_option();
 
-            let mut option = String::new();
+            let operation = Calculator::map_option_to_operation(option);
 
-            io::stdin().read_line(&mut option).expect("Failed to read line");
-
-            let option: i32 = match option.trim().parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    self.pretty_print_error(&String::from("Please type a number."));
-                    continue;
-                },
-            };
-
-            match option {
-                1 => {
-                    let (a, b) = self.get_two_numbers();
-                    self.pretty_print(&format!("{} + {} = {}", a, b, a + b));
-                },
-                2 => {
-                    let (a, b) = self.get_two_numbers();
-                    self.pretty_print(&format!("{} - {} = {}", a, b, a - b));
-                },
-                3 => {
-                    let (a, b) = self.get_two_numbers();
-                    self.pretty_print(&format!("{} * {} = {}", a, b, a * b));
-                },
-                4 => {
-                    let (a, b) = self.get_two_numbers();
-                    if b == 0.0 {
-                        self.pretty_print_error(&String::from("Cannot divide by zero"));
-                        continue;
-                    }
-                    self.pretty_print(&format!("{} / {} = {}", a, b, a / b));
-                },
-                5 => {
-                    self.pretty_print(&String::from("Exit"));
-                    break;
-                },
-                _ => {
-                    self.pretty_print_error(&String::from("Please type a number between 1 and 5"));
-                    continue
-                },
+            match self.execute_operation(&operation) {
+                Ok(LoopControl::Continue) => continue,
+                Ok(LoopControl::Exit) => break,
+                Err(err) => self.pretty_print_error(&err),
             }
         }
     }
